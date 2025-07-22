@@ -1,0 +1,14 @@
+numpy
+pandas
+scikit-learn
+streamlit
+groq
+fastapi
+uvicorn
+requests
+beautifulsoup4
+lxml
+python-dotenv
+openai
+langchain
+chromadb
