@@ -1,3 +1,9 @@
+Sanika_Resume.pdf
+*.db
+.vscode/
+bot_samples/
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
