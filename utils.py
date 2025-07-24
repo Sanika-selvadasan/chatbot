@@ -1,4 +1,3 @@
-import requests
 from groq_client import chat_with_groq
 
 def user_wants_human_agent(user_message):
@@ -8,23 +7,6 @@ def user_wants_human_agent(user_message):
     ]
     return any(phrase in user_message.lower() for phrase in triggers)
 
-def notify_human_agent(user_message, chat_log):
-    formspree_url = "https://formspree.io/f/mpwlzoaw"
-    payload = {
-        "email": "chatbot@demo.com",
-        "message": f"""
-🔔 New Human Escalation Request!
-
-User message:
-{user_message}
-
-Chat History:
-{chr(10).join(f"{m['role'].upper()}: {m['content']}" for m in chat_log)}
-"""}
-    try:
-        requests.post(formspree_url, data=payload, timeout=5)
-    except Exception as e:
-        print("Failed to notify human:", e)
 
 def generate_brief_summary(chat_log):
     text = "\n".join(

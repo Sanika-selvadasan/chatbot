@@ -1,37 +1,47 @@
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
+from chromadb.config import Settings 
 from langchain_huggingface import HuggingFaceEmbeddings
-import pdfplumber
 from langchain_core.documents import Document
 from langsmith import traceable
+import pdfplumber
 
+# Initialize embedding model and vector DB path
 embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 VECTOR_DIR = "db"
 
-
-
 @traceable(name="Index Text")
+
+
 def index_text(text: str, metadata: dict):
+    print(f"[IndexText] Text length: {len(text)} characters")
+
     if not text.strip():
-        print(" Skipping empty content")
+        print("[DEBUG] Skipping empty content.")
         return
 
     splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
     chunks = splitter.create_documents([text], metadatas=[metadata])
 
     if not chunks:
-        print("No chunks created from text")
+        print("[DEBUG] No chunks created from text.")
         return
 
-    print(f"Indexing {len(chunks)} chunks")
+    print(f"[DEBUG] Indexing {len(chunks)} chunks...")
 
-    vectordb = Chroma(persist_directory=VECTOR_DIR, embedding_function=embedding_model)
+    vectordb = Chroma(
+        persist_directory=VECTOR_DIR,
+        embedding_function=embedding_model,
+        collection_name="default",
+        client_settings=Settings(persist_directory=VECTOR_DIR)
+    )
 
     try:
+        print(f"initiated adding document to db")
         vectordb.add_documents(chunks)
-        vectordb.persist()
+        print(f'added documents to db')
     except ValueError as e:
-        print(f"Error adding documents to Chroma: {e}")
+        print(f"[ERROR] Error adding documents to Chroma: {e}")
 
 
 def extract_text_from_pdf(file_path: str) -> str:
@@ -39,27 +49,21 @@ def extract_text_from_pdf(file_path: str) -> str:
         with pdfplumber.open(file_path) as pdf:
             return "\n".join(page.extract_text() or "" for page in pdf.pages)
     except Exception as e:
-        print(f"Failed to extract text from PDF: {e}")
+        print(f"[ERROR] Failed to extract text from PDF: {e}")
         return ""
-    
-
 
 @traceable(name="Retrieve Context")
 def retrieve_context(query: str, k: int = 3):
-    print(f" Searching for: {query}")
- # prints # of vectors stored
-
+    print(f"[DEBUG] Retrieving context for query: {query}")
     vectordb = Chroma(persist_directory=VECTOR_DIR, embedding_function=embedding_model)
-    print("Checking DB contents...")
-    print(vectordb._collection.count()) 
-    retriever = vectordb.as_retriever(search_kwargs={"k": k})
 
     try:
+        retriever = vectordb.as_retriever(search_kwargs={"k": k})
         results = retriever.invoke(query)
-        print(f"Retrieved {len(results)} documents")
+        print(f"[DEBUG] Retrieved {len(results)} documents.")
         for i, doc in enumerate(results):
-            print(f"Result {i+1}: {doc.page_content[:300]}")
+            print(f"[DEBUG] Result {i+1}: {doc.page_content[:300]}...")
         return results
     except Exception as e:
-        print("Retrieval error:", e)
+        print(f"[ERROR] Retrieval error: {e}")
         return []
