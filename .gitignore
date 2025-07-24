@@ -2,6 +2,7 @@ Sanika_Resume.pdf
 *.db
 .vscode/
 bot_samples/
+db/
 
 
 # Byte-compiled / optimized / DLL files

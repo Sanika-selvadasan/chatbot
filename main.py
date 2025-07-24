@@ -1,5 +1,10 @@
 from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.responses import JSONResponse
+from fastapi import UploadFile, File, APIRouter
+import os
+from langsmith.run_helpers import traceable
+
+from fastapi import Request
 from pydantic import BaseModel
 from typing import Optional, List
 import os
@@ -8,6 +13,8 @@ from groq_client import chat_with_groq
 from utils import user_wants_human_agent, notify_human_agent, generate_brief_summary
 from scraper import scrape_website, compute_hash
 from vectorstore import index_text, extract_text_from_pdf, retrieve_context
+from dotenv import load_dotenv
+load_dotenv()
 
 # === Setup ===
 app = FastAPI()
@@ -32,6 +39,9 @@ class ChatRequest(BaseModel):
 
 
 # === Core Chat Endpoint ===
+
+
+@traceable(name="Chat Endpoint")
 @app.post("/chat")
 async def chat(req: ChatRequest):
     session_id = req.session_id
@@ -92,7 +102,8 @@ async def chat(req: ChatRequest):
 
         messages = [{"role": "system", "content": system_prompt}] + session["history"]
         response = chat_with_groq(messages)
-        bot_reply = response["choices"][0]["message"]["content"]
+        bot_reply = response.content
+
 
     session["history"].append({"role": "assistant", "content": bot_reply})
 
@@ -123,6 +134,8 @@ async def update_vector_store():
 
 
 # === Endpoint: Upload and index admin PDF ===
+
+
 @app.post("/upload-pdf")
 async def upload_pdf(file: UploadFile = File(...)):
     if not file.filename.endswith(".pdf"):
@@ -138,3 +151,4 @@ async def upload_pdf(file: UploadFile = File(...)):
 
     index_text(content, metadata={"source": file.filename})
     return {"status": "success", "message": f"{file.filename} uploaded and indexed."}
+

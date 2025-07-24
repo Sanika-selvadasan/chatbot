@@ -3,10 +3,14 @@ from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 import pdfplumber
 from langchain_core.documents import Document
+from langsmith import traceable
 
 embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 VECTOR_DIR = "db"
 
+
+
+@traceable(name="Index Text")
 def index_text(text: str, metadata: dict):
     if not text.strip():
         print(" Skipping empty content")
@@ -40,7 +44,22 @@ def extract_text_from_pdf(file_path: str) -> str:
     
 
 
+@traceable(name="Retrieve Context")
 def retrieve_context(query: str, k: int = 3):
+    print(f" Searching for: {query}")
+ # prints # of vectors stored
+
     vectordb = Chroma(persist_directory=VECTOR_DIR, embedding_function=embedding_model)
+    print("Checking DB contents...")
+    print(vectordb._collection.count()) 
     retriever = vectordb.as_retriever(search_kwargs={"k": k})
-    return retriever.invoke(query)  # updated to avoid deprecation warning
+
+    try:
+        results = retriever.invoke(query)
+        print(f"Retrieved {len(results)} documents")
+        for i, doc in enumerate(results):
+            print(f"Result {i+1}: {doc.page_content[:300]}")
+        return results
+    except Exception as e:
+        print("Retrieval error:", e)
+        return []

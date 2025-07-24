@@ -35,5 +35,5 @@ def generate_brief_summary(chat_log):
         {"role": "system", "content": "Summarize the following conversation briefly and clearly."},
         {"role": "user", "content": text}
     ]
-    result = chat_with_groq(prompt)
-    return result["choices"][0]["message"]["content"]
+    result = chat_with_groq(prompt).content
+    return result
