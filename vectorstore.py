@@ -14,7 +14,7 @@ VECTOR_DIR = "db"
 
 
 def index_text(text: str, metadata: dict):
-    print(f"[IndexText] Text length: {len(text)} characters")
+    # print(f"[IndexText] Text length: {len(text)} characters")
 
     if not text.strip():
         print("[DEBUG] Skipping empty content.")
@@ -27,7 +27,7 @@ def index_text(text: str, metadata: dict):
         print("[DEBUG] No chunks created from text.")
         return
 
-    print(f"[DEBUG] Indexing {len(chunks)} chunks...")
+    # print(f"[DEBUG] Indexing {len(chunks)} chunks...")
 
     vectordb = Chroma(
         persist_directory=VECTOR_DIR,
@@ -55,14 +55,25 @@ def extract_text_from_pdf(file_path: str) -> str:
 @traceable(name="Retrieve Context")
 def retrieve_context(query: str, k: int = 3):
     print(f"[DEBUG] Retrieving context for query: {query}")
-    vectordb = Chroma(persist_directory=VECTOR_DIR, embedding_function=embedding_model)
+
+    vectordb = Chroma(
+        persist_directory=VECTOR_DIR,
+        embedding_function=embedding_model,
+        collection_name="default",
+        client_settings=Settings(persist_directory=VECTOR_DIR)
+    )
+    # print("[DEBUG] Collection document count:", vectordb._collection.count())
+
+    docs = vectordb.similarity_search(query, k=10)
+    # for i, doc in enumerate(docs):
+        # print(f"[MATCH {i+1}] {doc.metadata.get('source')}:\n{doc.page_content[:200]}\n")
 
     try:
         retriever = vectordb.as_retriever(search_kwargs={"k": k})
         results = retriever.invoke(query)
-        print(f"[DEBUG] Retrieved {len(results)} documents.")
-        for i, doc in enumerate(results):
-            print(f"[DEBUG] Result {i+1}: {doc.page_content[:300]}...")
+        # print(f"[DEBUG] Retrieved {len(results)} documents.")
+        # for i, doc in enumerate(results):
+        #     print(f"[DEBUG] Result {i+1}: {doc.page_content[:300]}...")
         return results
     except Exception as e:
         print(f"[ERROR] Retrieval error: {e}")

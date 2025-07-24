@@ -18,7 +18,8 @@ def init_db():
     conn.commit()
     conn.close()
 
-def save_to_db(summary, email, phone):
+def save_to_db(summary: str, email: str = None, phone: str = None):
+
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute(

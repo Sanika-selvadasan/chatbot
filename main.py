@@ -36,9 +36,7 @@ LOW_CONFIDENCE_THRESHOLD = 0.4  # confidence threshold for escalation
 
 
 @traceable(name="Chat Endpoint")
-
-
-# === Core Chat Endpoint ===
+# === Chat Endpoint ===
 @app.post("/chat")
 async def chat(req: ChatRequest):
     session_id = req.session_id
@@ -48,75 +46,66 @@ async def chat(req: ChatRequest):
     if session_id not in chat_sessions:
         chat_sessions[session_id] = {
             "history": [],
-            "email": req.email,
-            "phone": req.phone,
-            "awaiting_email": False,
-            "awaiting_phone": False,
             "escalated": False
         }
 
     session = chat_sessions[session_id]
     session["history"].append({"role": "user", "content": user_message})
 
-    if session["awaiting_email"]:
-        session["email"] = user_message
-        session["awaiting_email"] = False
-        session["awaiting_phone"] = True
-        bot_reply = "✅ Got your email. Could you please provide your phone number too?"
+    retrieved_docs = retrieve_context(user_message, k=4)
+    context_text = "\n".join([doc.page_content for doc in retrieved_docs])
 
-    elif session["awaiting_phone"]:
-        session["phone"] = user_message
-        session["awaiting_phone"] = False
+    system_prompt = f"""
+    You are a professional customer service assistant for HotelsByDay, helping users book day-use hotel rooms in the United States.
+
+    Your behavior:
+    - Answer questions using only the provided context.
+    - Be concise, factual, and professional.
+    - Escalate to a human agent if:
+      - The user asks to speak to one.
+      - The query cannot be answered confidently from the context.
+      - The user expresses intent to book.
+
+    Your constraints:
+    - Do not invent or speculate information.
+    - Do not refer to or recommend visiting any website.
+    - Do not instruct users to contact hotels directly or search online.
+    - Never provide answers without clear support from the context.
+
+    Context:
+    {context_text}
+    """
+
+    messages = [{"role": "system", "content": system_prompt}] + session["history"]
+    response = chat_with_groq(messages)
+    bot_reply = response.content.strip()
+
+    # Trigger escalation
+    should_escalate = (
+        user_wants_human_agent(user_message) or
+        "I’m not sure" in bot_reply or
+        "I don’t have that information" in bot_reply or
+        "book" in user_message.lower() or
+        not context_text.strip()
+    )
+
+    if should_escalate and not session["escalated"]:
         escalate_to_human(session)
-        bot_reply = "📩 Thanks! I’ve escalated this to a human agent. You’ll be contacted shortly."
-
-    elif user_wants_human_agent(user_message) and not session["escalated"]:
-        if not session["email"]:
-            session["awaiting_email"] = True
-            bot_reply = "🔔 I can connect you to a human agent. First, please provide your email."
-        elif not session["phone"]:
-            session["awaiting_phone"] = True
-            bot_reply = "🔔 Got your email. Could you now provide your phone number?"
-        else:
-            escalate_to_human(session)
-            bot_reply = "📩 I’ve escalated this to a human agent. You’ll be contacted shortly."
-
-    else:
-        retrieved_docs = retrieve_context(user_message, k=4)
-        context_text = "\n".join([doc.page_content for doc in retrieved_docs])
-
-        system_prompt = (
-            "You are a helpful assistant. Use the following context to answer:\n\n"
-            f"{context_text}\n\n"
-            "If unsure, admit uncertainty. Be polite and concise."
-        )
-
-        messages = [{"role": "system", "content": system_prompt}] + session["history"]
-        response = chat_with_groq(messages)
-        bot_reply = response.content.strip()
-
-        # Low confidence check (optional scoring logic)
-        if "I'm not sure" in bot_reply.lower() or "I don’t have that information" in bot_reply.lower():
-            print("[Confidence] Low response confidence. Escalating...")
-            escalate_to_human(session)
-            bot_reply = "⚠️ I’m escalating this to a human agent for better assistance."
+        bot_reply = "Thank you. I'm escalating this to a human agent who will assist you further."
 
     session["history"].append({"role": "assistant", "content": bot_reply})
-
-    # Save summary if both email & phone exist
-    if session["email"] and session["phone"]:
-        summary = generate_brief_summary(session["history"])
-        save_to_db(summary, session["email"], session["phone"])
-
     return JSONResponse({"reply": bot_reply})
 
-# Escalation Handler
+# === Escalation Handler ===
 def escalate_to_human(session):
     session["escalated"] = True
     summary = generate_brief_summary(session["history"])
     print("\n=== URGENT HUMAN ALERT ===")
     print("Chat Summary:\n", summary)
     print("==========================\n")
+    save_to_db(summary)
+
+
 
 @app.post("/update-website")
 async def update_vector_store():
